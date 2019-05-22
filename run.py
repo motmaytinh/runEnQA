@@ -1,15 +1,21 @@
 from preproc import word_tokenize
 from preproc import convert_idx
 from collections import Counter
+from matplotlib import cm
 import os
 import numpy as np
 import torch
 import json
 import torch.nn.functional as F
+import argparse
+import matplotlib.pyplot as plt
 
-def predict(c, q):
+def predict(config, c, q):
     c_tokens = word_tokenize(c)
     q_tokens = word_tokenize(q)
+
+    setattr(config, 'c_tokens', c_tokens)
+    setattr(config, 'q_tokens', q_tokens)
 
     c_chars = [list(token) for token in c_tokens]
     q_chars = [list(token) for token in q_tokens]
@@ -82,7 +88,7 @@ def predict(c, q):
     q_word_idxs = torch.tensor(q_word_idxs).long()
     q_char_idxs = torch.tensor(q_char_idxs).long()
 
-    p1, p2 = model(c_word_idxs, c_char_idxs, q_word_idxs, q_char_idxs)
+    p1, p2 = model(config, c_word_idxs, c_char_idxs, q_word_idxs, q_char_idxs)
 
     p1 = F.softmax(p1, dim=1)
     p2 = F.softmax(p2, dim=1)
@@ -102,8 +108,48 @@ def predict(c, q):
     answer = c[start_idx:end_idx]
     return answer
 
+def gen_heatmap(data, row_labels, col_labels, ax=None, cbar_kw={}, **kwargs):
+    if not ax:
+        ax = plt.gca()
+
+    im = ax.imshow(data, cmap=cm.Blues)
+
+    cbar = ax.figure.colorbar(im, ax=ax)
+    ax.set_xticks(np.arange(data.shape[1]))
+    ax.set_yticks(np.arange(data.shape[0]))
+
+    ax.set_xticklabels(col_labels)
+    ax.set_yticklabels(row_labels)
+
+    ax.tick_params(top=True, bottom=False, labeltop=True, labelbottom=False)
+    plt.setp(ax.get_xticklabels(), rotation=90, ha="center", rotation_mode=None)
+
+    return im, cbar
+
 if __name__ == '__main__':
     c = 'My name is Sang. I am twenty years old.'
     q = 'How old is Sang?'
-    answer = predict(c, q)
-    print(answer)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batch_size', default=16, type=int)
+    config = parser.parse_args()
+
+    answer = predict(config, c, q)
+
+    S = config.similarity_matrix
+    S = S[0].data.numpy().transpose()
+    c_tokens = config.c_tokens
+    q_tokens = config.q_tokens
+
+    S = S[:len(q_tokens), :len(c_tokens)]
+
+    fig, ax = plt.subplots()
+
+    im, cbar = gen_heatmap(S, q_tokens, c_tokens)
+
+    fig.tight_layout()
+    plt.show()
+
+    print('Context: ', c)
+    print('Question: ', q)
+    print('Answer: ', answer)

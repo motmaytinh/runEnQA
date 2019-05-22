@@ -251,11 +251,13 @@ class CQAttention(nn.Module):
         nn.init.constant_(bias, 0)
         self.bias = nn.Parameter(bias)
 
-    def forward(self, C, Q, Cmask, Qmask):
+    def forward(self, config, C, Q, Cmask, Qmask):
         C = C.transpose(1, 2)
         Q = Q.transpose(1, 2)
         batch_size_c = C.size()[0]
         S = self.trilinear_for_attention(C, Q)
+
+        setattr(config, 'similarity_matrix', S)
         Cmask = Cmask.view(batch_size_c, Lc, 1)
         Qmask = Qmask.view(batch_size_c, 1, Lq)
         S1 = F.softmax(mask_logits(S, Qmask), dim=2)
@@ -306,7 +308,7 @@ class QANet(nn.Module):
         self.model_enc_blks = nn.ModuleList([EncoderBlock(conv_num=2, ch_num=D, k=5) for _ in range(7)])
         self.out = Pointer()
 
-    def forward(self, Cwid, Ccid, Qwid, Qcid):
+    def forward(self, config, Cwid, Ccid, Qwid, Qcid):
         maskC = (torch.zeros_like(Cwid) != Cwid).float()
         maskQ = (torch.zeros_like(Qwid) != Qwid).float()
         Cw, Cc = self.word_emb(Cwid), self.char_emb(Ccid)
@@ -314,7 +316,7 @@ class QANet(nn.Module):
         C, Q = self.emb(Cc, Cw, Lc), self.emb(Qc, Qw, Lq)
         Ce = self.emb_enc(C, maskC, 1, 1)
         Qe = self.emb_enc(Q, maskQ, 1, 1)
-        X = self.cq_att(Ce, Qe, maskC, maskQ)
+        X = self.cq_att(config, Ce, Qe, maskC, maskQ)
         M0 = self.cq_resizer(X)
         M0 = F.dropout(M0, p=dropout, training=self.training)
         for i, blk in enumerate(self.model_enc_blks):
