@@ -17,8 +17,6 @@ def index():
 	print(caq)
 	context = caq['c']
 	question = caq['q']
-	# context = "I'm Quy. I'm 21 years old"
-	# question = "How old is Quy"
 	config = Namespace(batch_size=16)
 	answer = predict(config, context, question)
 
